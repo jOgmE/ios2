@@ -24,10 +24,11 @@ typedef struct sh_var{
 } sh_var;
 
 typedef struct semaphores{
-    sem_t *sh_mutex;
+    sem_t *mutex;
     sem_t *no_judge;
     sem_t *confirmed;
     sem_t *all_signed_in;
+    sem_t *write_file;
 } semaphores;
 
 #endif /*__PROJ_2__*/
