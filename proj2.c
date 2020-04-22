@@ -16,30 +16,36 @@
 
 
 void enter_2_judge(int jt, sh_var *shared_vars, semaphores *sems){
+    sem_wait(sems->no_judge);
+    printf("no judge\n");
     sem_wait(sems->sh_mutex);
+    printf("Mutex\n");
     //write arriving to output
     fprintf(shared_vars->f, "%ld:  JUDGE  enters:  %d:  %d:  %d\n", *(shared_vars->a), \
-            *(shared_vars->ne), *(shared_vars->nc), *(shared_vars->ne)+ *(shared_vars->nc));
+            *(shared_vars->ne), *(shared_vars->nc), *(shared_vars->nb));
     (*(shared_vars->a))++;
+    *(shared_vars->judge) = 1;
     
+    printf("j checking signed\n");
     //check signed
     if(*(shared_vars->ne) > *(shared_vars->nc)){
         fprintf(shared_vars->f, "%ld:  JUDGE  waits for imm:  %d:  %d:  %d\n", \
                 *(shared_vars->a), *(shared_vars->ne), *(shared_vars->nc), \
-                *(shared_vars->ne)+ *(shared_vars->nc));
+                *(shared_vars->nb));
         (*(shared_vars->a))++;
         //sem
         sem_post(sems->sh_mutex);
         sem_wait(sems->all_signed_in);
     }
 
+    printf("j confirms\n");
     //--confirmation--
     fprintf(shared_vars->f, "%ld:  JUDGE  starts confirmation:  %d:  %d:  %d\n", \
             *(shared_vars->a), *(shared_vars->ne), *(shared_vars->nc), \
-            *(shared_vars->ne)+ *(shared_vars->nc));
+            *(shared_vars->nb));
     (*(shared_vars->a))++;
     if(jt > 0){
-        sleep(rand() % (jt+1));
+        usleep(rand() % (jt+1));
     }
 
     //setting counters
@@ -49,47 +55,94 @@ void enter_2_judge(int jt, sh_var *shared_vars, semaphores *sems){
     //printing output
     fprintf(shared_vars->f, "%ld:  JUDGE  ends confirmation:  %d:  %d:  %d\n", \
             *(shared_vars->a), *(shared_vars->ne), *(shared_vars->nc), \
-            *(shared_vars->ne)+ *(shared_vars->nc));
+            *(shared_vars->nb));
     (*(shared_vars->a))++;
     //sem
     sem_post(sems->confirmed);
 
+    printf("j ended confirmation\n");
     //--leave--
     if(jt > 0){
-        sleep(rand() % (jt+1));
+        usleep(rand() % (jt+1));
     }
     fprintf(shared_vars->f, "%ld:  JUDGE  leaves:  %d:  %d:  %d\n", \
             *(shared_vars->a), *(shared_vars->ne), *(shared_vars->nc), \
-            *(shared_vars->ne)+ *(shared_vars->nc));
+            *(shared_vars->nb));
     (*(shared_vars->a))++;
+
+    *(shared_vars->judge) = 0;
 
     //sem
     sem_post(sems->sh_mutex);
     sem_post(sems->no_judge);
 }
 
-void imm(sh_var *shared_vars, semaphores *sems){
-    (void)shared_vars;
-    (void)sems;
-
+void imm(int it, sh_var *shared_vars, semaphores *sems){
     //writing output
     sem_wait(sems->sh_mutex);
     //increment immigrants counter
     (*(shared_vars->i))++;
-    fprintf(shared_vars->f, "%ld:  IMM  %d:  starts\n", *(shared_vars->a), *(shared_vars->i));
+    fprintf(shared_vars->f, "%ld:  IMM %d:  starts\n", *(shared_vars->a), *(shared_vars->i));
     (*(shared_vars->a))++;
     sem_post(sems->sh_mutex);
+
+    //enter the room
+    sem_wait(sems->no_judge);
+    //entered
+    (*(shared_vars->ne))++;
+    (*(shared_vars->nb))++;
+    fprintf(shared_vars->f, "%ld:  IMM %d:  enters:  %d:  %d:  %d\n", *(shared_vars->a), \
+            *(shared_vars->i), *(shared_vars->ne), *(shared_vars->nc), \
+            *(shared_vars->nb));
+    printf("imm entered\n");
+    sem_post(sems->no_judge);
+    //checking in
+    sem_wait(sems->sh_mutex);
+    (*(shared_vars->nc))++;
+    fprintf(shared_vars->f, "%ld:  IMM %d:  checks:  %d:  %d:  %d\n", *(shared_vars->a), \
+            *(shared_vars->i), *(shared_vars->ne), *(shared_vars->nc), \
+            *(shared_vars->nb));
+    printf("imm checked in\n");
+    if(*(shared_vars->judge) == 1 && *(shared_vars->ne) == *(shared_vars->nc)){
+        sem_post(sems->all_signed_in);
+    }
+    sem_post(sems->sh_mutex);
+    //waiting for confirmation
+    sem_wait(sems->confirmed);
+    //certificate
+    fprintf(shared_vars->f, "%ld:  IMM %d:  wants certificate:  %d:  %d:  %d\n", \
+            *(shared_vars->a), *(shared_vars->i), *(shared_vars->ne), *(shared_vars->nc), \
+            *(shared_vars->nb));
+    printf("imm wants ce\n");
+    if(it > 0){
+        usleep(rand() % it);
+    }
+    fprintf(shared_vars->f, "%ld:  IMM %d:  got certificate:  %d:  %d:  %d\n", \
+            *(shared_vars->a), *(shared_vars->i), *(shared_vars->ne), *(shared_vars->nc), \
+            *(shared_vars->nb));
+    printf("imm got ce\n");
+    //leaving
+    sem_wait(sems->no_judge);
+    (*(shared_vars->nb))--;
+    fprintf(shared_vars->f, "%ld:  IMM %d:  leaves:  %d:  %d:  %d\n", \
+            *(shared_vars->a), *(shared_vars->i), *(shared_vars->ne), *(shared_vars->nc), \
+            *(shared_vars->nb));
+    printf("imm leaves\n");
+    (*(shared_vars->finished))++;
+    sem_post(sems->no_judge);
+
+    //kill
+    exit(0);
 }
 
 void imm_generator(int pi, int ig, int it, sh_var *shared_vars, semaphores *sems){
-    printf("generating\n");
-    (void)it;
     for(int i=0; i<pi; i++){
         if(ig > 0){
-            sleep(rand() % (ig+1));
+            usleep(rand() % (ig+1));
         }
         if(fork() == 0){
-            imm(shared_vars, sems);
+            printf("new imm created\n");
+            imm(it, shared_vars, sems);
         }
     }
 }
@@ -132,27 +185,31 @@ int main(int argc, char *argv[]){
     }
 
     //creating/cleaning the output file
-    FILE *f = fopen("proj2.out", "w");
+    FILE *f = mmap(NULL, sizeof(FILE), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
+    f = fopen("proj2.out", "w");
     if(!f){
         fprintf(stderr, "Can't write output file\n");
         exit(1);
     }
-    fclose(f);
-    f = fopen("proj2.out", "a");
 
     //shared variables
     long *a = mmap(NULL, sizeof(long), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
     int *i = mmap(NULL, sizeof(int), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
     int *ne = mmap(NULL, sizeof(int), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
     int *nc = mmap(NULL, sizeof(int), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
+    int *nb = mmap(NULL, sizeof(int), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
     int *finished = mmap(NULL, sizeof(int), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
+    int *judge = mmap(NULL, sizeof(int), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
     *a = 1;
     *i = 0;
     *ne = 0;
     *nc = 0;
+    *nb = 0;
+    *judge = 0;
     *finished = 0; //how many processess were finished the process of getting a CE
 
-    sh_var shared_vars = {.a=a, .i=i, .ne=ne, .nc=nc, .finished=finished, .f=f};
+    sh_var shared_vars = {.a=a, .i=i, .ne=ne, .nc=nc, .nb=nb, .finished=finished, .f=f, \
+                            .judge=judge};
 
     //semaphores
     sem_t *sh_mutex = mmap(NULL, sizeof(sem_t), PROT_READ|PROT_WRITE, \
@@ -166,8 +223,8 @@ int main(int argc, char *argv[]){
     //initializing them
     sem_init(sh_mutex, 1, 1);
     sem_init(no_judge, 1, 1);
-    sem_init(confirmed, 1, 1);
-    sem_init(all_signed_in, 1, 1);
+    sem_init(confirmed, 1, 0);
+    sem_init(all_signed_in, 1, 0);
     //saving them into struct
     semaphores sems = {.sh_mutex=sh_mutex, .no_judge=no_judge, .confirmed=confirmed, \
         .all_signed_in= all_signed_in};
@@ -175,15 +232,22 @@ int main(int argc, char *argv[]){
     //generating processes
     pid_t pid;
     if((pid = fork()) == 0){
+        printf("this is judge\n");
         //child - judge
         while(*finished != pi){
             if(jg > 0){
-                sleep(rand() % (jg+1));
+                usleep(rand() % (jg+1));
             }
+            printf("judge enters\n");
             enter_2_judge(jt, &shared_vars, &sems);
+            printf("judge leaves\n");
         }
+        sem_wait(sems.sh_mutex);
         fprintf(shared_vars.f, "%ld:  JUDGE:  finishes\n", *(shared_vars.a));
         (*(shared_vars.a))++;
+        sem_post(sems.sh_mutex);
+        //kill judge
+        exit(0);
     }else if(pid == -1){
         fprintf(stderr, "forking failed\n");
         
@@ -192,6 +256,9 @@ int main(int argc, char *argv[]){
         munmap(i, sizeof(int));
         munmap(ne, sizeof(int));
         munmap(nc, sizeof(int));
+        munmap(nb, sizeof(int));
+        munmap(finished, sizeof(int));
+        munmap(judge, sizeof(int));
         sem_destroy(sems.sh_mutex);
         munmap(sems.sh_mutex, sizeof(sem_t));
         sem_destroy(sems.no_judge);
@@ -200,12 +267,19 @@ int main(int argc, char *argv[]){
         munmap(sems.confirmed, sizeof(sem_t));
         sem_destroy(sems.all_signed_in);
         munmap(sems.all_signed_in, sizeof(sem_t));
+        fclose(f);
+        munmap(f, sizeof(FILE));
         exit(1);
     }else{
         //parent
         if((pid = fork()) == 0){
             //child - IMM generator
             imm_generator(pi, ig, it, &shared_vars, &sems);
+            for(int i=0; i<pi;i++){
+                wait(NULL);
+            }
+            //killing generator
+            exit(0);
         }else if(pid == -1){
             fprintf(stderr, "forking failed\n");
             
@@ -214,6 +288,9 @@ int main(int argc, char *argv[]){
             munmap(i, sizeof(int));
             munmap(ne, sizeof(int));
             munmap(nc, sizeof(int));
+            munmap(nb, sizeof(int));
+            munmap(finished, sizeof(int));
+            munmap(judge, sizeof(int));
             sem_destroy(sems.sh_mutex);
             munmap(sems.sh_mutex, sizeof(sem_t));
             sem_destroy(sems.no_judge);
@@ -222,6 +299,8 @@ int main(int argc, char *argv[]){
             munmap(sems.confirmed, sizeof(sem_t));
             sem_destroy(sems.all_signed_in);
             munmap(sems.all_signed_in, sizeof(sem_t));
+            fclose(f);
+            munmap(f, sizeof(FILE));
             exit(1);
         }else{
             //parent
@@ -237,6 +316,9 @@ int main(int argc, char *argv[]){
     munmap(i, sizeof(int));
     munmap(ne, sizeof(int));
     munmap(nc, sizeof(int));
+    munmap(nb, sizeof(int));
+    munmap(finished, sizeof(int));
+    munmap(judge, sizeof(int));
     sem_destroy(sems.sh_mutex);
     munmap(sems.sh_mutex, sizeof(sem_t));
     sem_destroy(sems.no_judge);
@@ -245,6 +327,8 @@ int main(int argc, char *argv[]){
     munmap(sems.confirmed, sizeof(sem_t));
     sem_destroy(sems.all_signed_in);
     munmap(sems.all_signed_in, sizeof(sem_t));
+    fclose(f);
+    munmap(f, sizeof(FILE));
 
     return 0;
 }

@@ -17,8 +17,10 @@ typedef struct sh_var{
     int *i;
     int *ne;
     int *nc;
+    int *nb;
     int *finished;
     FILE *f;
+    int *judge;
 } sh_var;
 
 typedef struct semaphores{
