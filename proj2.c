@@ -16,39 +16,42 @@
 
 
 void enter_2_judge(int jt, sh_var *shared_vars, semaphores *sems){
-    sem_wait(sems->no_judge);
-    //write arriving to output
     sem_wait(sems->write_file);
-    fprintf(shared_vars->f, "%3ld:  JUDGE  enters:  %d:  %d:  %d\n", *(shared_vars->a), \
+    fprintf(shared_vars->f, "%3ld:  JUDGE:  wants to enter:  %d:  %d:  %d\n", *(shared_vars->a), \
             *(shared_vars->ne), *(shared_vars->nc), *(shared_vars->nb));
     (*(shared_vars->a))++;
     sem_post(sems->write_file);
-    sem_wait(sems->mutex);
+    sem_wait(sems->no_judge);
+    //write arriving to output
+    sem_wait(sems->write_file);
+    fprintf(shared_vars->f, "%3ld:  JUDGE:  enters:  %d:  %d:  %d\n", *(shared_vars->a), \
+            *(shared_vars->ne), *(shared_vars->nc), *(shared_vars->nb));
+    (*(shared_vars->a))++;
     *(shared_vars->judge) = 1;
-    
+    sem_post(sems->write_file);
+
     //check signed
+    sem_wait(sems->write_file);
     if(*(shared_vars->ne) > *(shared_vars->nc)){
-        sem_post(sems->mutex);
-        sem_wait(sems->write_file);
-        fprintf(shared_vars->f, "%3ld:  JUDGE  waits for imm:  %d:  %d:  %d\n", \
+        fprintf(shared_vars->f, "%3ld:  JUDGE:  waits for imm:  %d:  %d:  %d\n", \
                 *(shared_vars->a), *(shared_vars->ne), *(shared_vars->nc), \
                 *(shared_vars->nb));
         (*(shared_vars->a))++;
         sem_post(sems->write_file);
         sem_wait(sems->all_signed_in);
     }else{
-        sem_post(sems->mutex);
+        sem_post(sems->write_file);
     }
 
     //--confirmation--
     sem_wait(sems->write_file);
-    fprintf(shared_vars->f, "%3ld:  JUDGE  starts confirmation:  %d:  %d:  %d\n", \
+    fprintf(shared_vars->f, "%3ld:  JUDGE:  starts confirmation:  %d:  %d:  %d\n", \
             *(shared_vars->a), *(shared_vars->ne), *(shared_vars->nc), \
             *(shared_vars->nb));
     (*(shared_vars->a))++;
     sem_post(sems->write_file);
     if(jt > 0){
-        usleep(rand() % (jt+1));
+        usleep((rand() % (jt+1))*1000);
     }
 
     int local_nc = *(shared_vars->nc);
@@ -57,22 +60,23 @@ void enter_2_judge(int jt, sh_var *shared_vars, semaphores *sems){
     sem_wait(sems->write_file);
     *(shared_vars->nc) = 0;
     *(shared_vars->ne) = 0;
-    fprintf(shared_vars->f, "%3ld:  JUDGE  ends confirmation:  %d:  %d:  %d\n", \
+    fprintf(shared_vars->f, "%3ld:  JUDGE:  ends confirmation:  %d:  %d:  %d\n", \
             *(shared_vars->a), *(shared_vars->ne), *(shared_vars->nc), \
             *(shared_vars->nb));
     (*(shared_vars->a))++;
     sem_post(sems->write_file);
 
     for(int i=0; i<local_nc; i++){
+        (*(shared_vars->finished))++;
         sem_post(sems->confirmed);
     }
 
     //--leave--
     if(jt > 0){
-        usleep(rand() % (jt+1));
+        usleep(rand() % (jt+1)*1000);
     }
     sem_wait(sems->write_file);
-    fprintf(shared_vars->f, "%3ld:  JUDGE  leaves:  %d:  %d:  %d\n", \
+    fprintf(shared_vars->f, "%3ld:  JUDGE:  leaves:  %d:  %d:  %d\n", \
             *(shared_vars->a), *(shared_vars->ne), *(shared_vars->nc), \
             *(shared_vars->nb));
     (*(shared_vars->a))++;
@@ -112,21 +116,17 @@ void imm(int it, sh_var *shared_vars, semaphores *sems){
 
     sem_post(sems->no_judge);
     //checking in
-    sem_wait(sems->mutex);
-    (*(shared_vars->nc))++;
-    sem_post(sems->mutex);
     sem_wait(sems->write_file);
+    (*(shared_vars->nc))++;
     fprintf(shared_vars->f, "%3ld:  IMM %d:  checks:  %d:  %d:  %d\n", *(shared_vars->a), \
             my_id, *(shared_vars->ne), *(shared_vars->nc), \
             *(shared_vars->nb));
     (*(shared_vars->a))++;
-    sem_post(sems->write_file);
-
-    sem_wait(sems->mutex);
     if(*(shared_vars->judge) == 1 && *(shared_vars->ne) == *(shared_vars->nc)){
         sem_post(sems->all_signed_in);
     }
-    sem_post(sems->mutex);
+    sem_post(sems->write_file);
+
     //waiting for confirmation
     sem_wait(sems->confirmed);
     //certificate
@@ -138,7 +138,7 @@ void imm(int it, sh_var *shared_vars, semaphores *sems){
     sem_post(sems->write_file);
 
     if(it > 0){
-        usleep(rand() % it);
+        usleep(rand() % (it+1)*1000);
     }
 
     sem_wait(sems->write_file);
@@ -157,7 +157,6 @@ void imm(int it, sh_var *shared_vars, semaphores *sems){
             *(shared_vars->a), my_id, *(shared_vars->ne), *(shared_vars->nc), \
             *(shared_vars->nb));
     (*(shared_vars->a))++;
-    (*(shared_vars->finished))++;
     sem_post(sems->write_file);
 
     sem_post(sems->no_judge);
@@ -169,7 +168,7 @@ void imm(int it, sh_var *shared_vars, semaphores *sems){
 void imm_generator(int pi, int ig, int it, sh_var *shared_vars, semaphores *sems){
     for(int i=0; i<pi; i++){
         if(ig > 0){
-            usleep(rand() % (ig+1));
+            usleep(rand() % (ig+1)*1000);
         }
         if(fork() == 0){
             imm(it, shared_vars, sems);
@@ -266,23 +265,20 @@ int main(int argc, char *argv[]){
     //generating processes
     pid_t pid;
     if((pid = fork()) == 0){
-        //child - judge
-        while(1){
-            //control ending
-            sem_wait(sems.mutex);
-            if(*finished == pi) break;
-            sem_post(sems.mutex);
-
-            if(jg > 0){
-                usleep(rand() % (jg+1));
+        //child - IMM generator
+        for(int i=0; i<pi; i++){
+            if(ig > 0){
+                usleep(rand() % (ig+1)*1000);
             }
-            enter_2_judge(jt, &shared_vars, &sems);
+            if(fork() == 0){
+                imm(it, &shared_vars, &sems);
+            }
         }
-        sem_wait(sems.mutex);
-        fprintf(shared_vars.f, "%3ld:  JUDGE:  finishes\n", *(shared_vars.a));
-        (*(shared_vars.a))++;
-        sem_post(sems.mutex);
-        //kill judge
+
+        for(int i=0; i<pi;i++){
+            wait(NULL);
+        }
+        //killing generator
         exit(0);
     }else if(pid == -1){
         fprintf(stderr, "forking failed\n");
@@ -309,12 +305,25 @@ int main(int argc, char *argv[]){
     }else{
         //parent
         if((pid = fork()) == 0){
-            //child - IMM generator
-            imm_generator(pi, ig, it, &shared_vars, &sems);
-            for(int i=0; i<pi;i++){
-                wait(NULL);
+            //child - judge
+            while(1){
+                if(jg > 0){
+                    usleep(rand() % (jg+1)*1000);
+                }
+
+                enter_2_judge(jt, &shared_vars, &sems);
+
+                //control ending
+                sem_wait(sems.mutex);
+                if(*(shared_vars.finished) == pi) break;
+                sem_post(sems.mutex);
             }
-            //killing generator
+
+            sem_wait(sems.write_file);
+            fprintf(shared_vars.f, "%3ld:  JUDGE:  finishes\n", *(shared_vars.a));
+            (*(shared_vars.a))++;
+            sem_post(sems.write_file);
+            //kill judge
             exit(0);
         }else if(pid == -1){
             fprintf(stderr, "forking failed\n");
